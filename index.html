@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FrameForge — Implementation Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700;900&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg: #07080c;
+  --surface: #0e0f15;
+  --surface2: #13151d;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.13);
+  --text: #e4e6f0;
+  --muted: #52556a;
+  --green: #4ade80;
+  --blue: #60a5fa;
+  --orange: #fb923c;
+  --purple: #c084fc;
+  --yellow: #fbbf24;
+  --red: #f87171;
+  --font: 'Outfit', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-thumb { background: #1e2030; }
+
+@keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+@keyframes pulse { 0%,100%{opacity:.5} 50%{opacity:1} }
+@keyframes spin { to { transform:rotate(360deg); } }
+@keyframes checkmark { from { stroke-dashoffset: 30; } to { stroke-dashoffset: 0; } }
+
+/* ── Layout ── */
+.layout { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+
+/* ── Sidebar ── */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 28px 0;
+  position: sticky; top: 0; height: 100vh;
+  overflow-y: auto; z-index: 10;
+}
+.sidebar-header { padding: 0 20px 24px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.logo { font-size: 18px; font-weight: 900; letter-spacing: -0.03em;
+  background: linear-gradient(90deg, var(--green), var(--blue));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.logo-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+.phase-group { margin-bottom: 6px; }
+.phase-label {
+  font-size: 9px; font-weight: 700; color: var(--muted); letter-spacing: 0.14em;
+  padding: 8px 20px 4px; text-transform: uppercase; display: block;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 20px; font-size: 13px; font-weight: 500;
+  color: var(--muted); cursor: pointer; border: none; background: none;
+  width: 100%; text-align: left; transition: all 0.15s;
+  border-left: 2px solid transparent;
+}
+.nav-item:hover { background: rgba(255,255,255,0.03); color: var(--text); }
+.nav-item.active { background: rgba(74,222,128,0.07); color: var(--green); border-left-color: var(--green); }
+.nav-item .step-num {
+  width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 800; border: 1px solid; flex-shrink: 0; font-family: var(--mono);
+}
+.nav-item .step-num.done { background: var(--green); border-color: var(--green); color: #000; }
+.nav-item .step-num.active-num { border-color: var(--green); color: var(--green); }
+.nav-item .step-num.todo { border-color: var(--border2); color: var(--muted); }
+
+.progress-wrap { padding: 16px 20px; margin-top: 8px; }
+.progress-label { font-size: 10px; color: var(--muted); margin-bottom: 6px; display: flex; justify-content: space-between; }
+.progress-track { height: 3px; background: rgba(255,255,255,0.06); border-radius: 999px; overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, var(--green), var(--blue)); border-radius: 999px; transition: width 0.4s ease; }
+
+/* ── Main ── */
+.main { padding: 48px 56px 120px; max-width: 860px; }
+
+.section { display: none; animation: fadeUp 0.4s ease; }
+.section.active { display: block; }
+
+/* ── Step header ── */
+.step-header { margin-bottom: 36px; }
+.step-badge {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: rgba(74,222,128,0.08); border: 1px solid rgba(74,222,128,0.2);
+  border-radius: 999px; padding: 4px 14px; margin-bottom: 14px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: var(--green);
+}
+.step-title { font-size: 32px; font-weight: 900; letter-spacing: -0.03em; margin-bottom: 10px; }
+.step-desc { font-size: 15px; color: var(--muted); line-height: 1.65; font-weight: 300; max-width: 600px; }
+
+/* ── Cards ── */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 22px; margin-bottom: 14px;
+}
+.card-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.card-desc { font-size: 13px; color: var(--muted); line-height: 1.5; font-weight: 300; }
+
+.option-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+.option-btn {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px; cursor: pointer; text-align: left;
+  transition: all 0.15s;
+}
+.option-btn:hover { border-color: var(--border2); }
+.option-btn.selected { border-color: var(--green); background: rgba(74,222,128,0.06); }
+.option-icon { font-size: 22px; margin-bottom: 8px; }
+.option-name { font-size: 13px; font-weight: 700; margin-bottom: 3px; }
+.option-btn.selected .option-name { color: var(--green); }
+.option-meta { font-size: 11px; color: var(--muted); }
+
+/* ── Code blocks ── */
+.code-wrap {
+  background: #090a0e; border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px; overflow: hidden; margin: 14px 0;
+}
+.code-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; background: rgba(255,255,255,0.025); border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.code-filename { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+.code-copy {
+  font-size: 11px; color: var(--muted); cursor: pointer; background: none; border: none;
+  font-family: var(--font); transition: color 0.15s; padding: 2px 8px; border-radius: 4px;
+}
+.code-copy:hover { color: var(--green); background: rgba(74,222,128,0.08); }
+pre {
+  padding: 18px 20px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px;
+  line-height: 1.75; color: #c9d1d9;
+}
+.hl-cmd    { color: #79c0ff; }
+.hl-str    { color: #a5d6ff; }
+.hl-cmt    { color: #484f58; font-style: italic; }
+.hl-key    { color: var(--green); }
+.hl-val    { color: #ffa657; }
+.hl-num    { color: var(--purple); }
+.hl-head   { color: var(--yellow); font-weight: 700; }
+
+/* ── Alerts ── */
+.alert {
+  display: flex; gap: 12px; padding: 14px 16px; border-radius: 10px; margin: 14px 0;
+  font-size: 13px; line-height: 1.6; font-weight: 300;
+}
+.alert-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+.alert-info    { background: rgba(96,165,250,0.08); border: 1px solid rgba(96,165,250,0.2); color: #93c5fd; }
+.alert-warn    { background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.2); color: #fde68a; }
+.alert-success { background: rgba(74,222,128,0.08); border: 1px solid rgba(74,222,128,0.2); color: #86efac; }
+.alert-danger  { background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2); color: #fca5a5; }
+
+/* ── Checklist ── */
+.checklist { list-style: none; display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
+.check-item {
+  display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  cursor: pointer; transition: border-color 0.15s;
+}
+.check-item:hover { border-color: var(--border2); }
+.check-item.done { border-color: rgba(74,222,128,0.25); background: rgba(74,222,128,0.04); }
+.check-box {
+  width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--border2);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px;
+  transition: all 0.2s;
+}
+.check-item.done .check-box { background: var(--green); border-color: var(--green); }
+.check-text { font-size: 13px; line-height: 1.5; font-weight: 400; }
+.check-item.done .check-text { color: var(--muted); text-decoration: line-through; }
+
+/* ── Step nav buttons ── */
+.step-nav { display: flex; gap: 10px; margin-top: 40px; padding-top: 28px; border-top: 1px solid var(--border); }
+.btn-nav {
+  padding: 12px 28px; border-radius: 10px; font-size: 14px; font-weight: 700;
+  cursor: pointer; transition: all 0.18s; border: none; font-family: var(--font);
+}
+.btn-prev { background: transparent; border: 1px solid var(--border2); color: var(--muted); }
+.btn-prev:hover { color: var(--text); border-color: var(--border2); }
+.btn-next { background: var(--green); color: #000; }
+.btn-next:hover { filter: brightness(1.08); transform: translateY(-1px); }
+
+/* ── Architecture diagram ── */
+.arch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 20px 0; }
+.arch-box {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px; text-align: center;
+}
+.arch-icon { font-size: 24px; margin-bottom: 8px; }
+.arch-name { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+.arch-desc { font-size: 10px; color: var(--muted); line-height: 1.4; }
+.arch-arrow { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 18px; }
+
+/* ── Env var table ── */
+.env-table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+.env-table th { font-size: 10px; font-weight: 800; color: var(--muted); text-align: left;
+  padding: 8px 14px; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.08em; }
+.env-table td { padding: 11px 14px; border-bottom: 1px solid rgba(255,255,255,0.03); font-size: 12px; }
+.env-table td:first-child { font-family: var(--mono); color: var(--green); }
+.env-table td:last-child { color: var(--muted); font-size: 11px; }
+
+/* ── Cost table ── */
+.cost-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0; }
+.cost-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.cost-name { font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+.cost-price { font-size: 22px; font-weight: 900; letter-spacing: -0.03em; }
+.cost-detail { font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+/* ── Tabs ── */
+.tabs { display: flex; gap: 4px; background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  border-radius: 10px; padding: 4px; margin-bottom: 16px; }
+.tab-btn { flex: 1; padding: 8px; border-radius: 7px; border: none; background: none;
+  font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; transition: all 0.15s; font-family: var(--font); }
+.tab-btn.active { background: rgba(74,222,128,0.12); color: var(--green); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ── Final success ── */
+.success-hero { text-align: center; padding: 48px 24px; }
+.success-icon { font-size: 64px; margin-bottom: 20px; animation: fadeUp 0.5s ease; }
+.success-title { font-size: 36px; font-weight: 900; letter-spacing: -0.03em; margin-bottom: 12px; }
+.success-links { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; max-width: 500px; margin: 28px auto 0; }
+.success-link {
+  padding: 14px; border-radius: 12px; font-size: 13px; font-weight: 700;
+  cursor: pointer; border: none; transition: all 0.18s; font-family: var(--font);
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ══ SIDEBAR ══════════════════════════════════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <div class="logo">FrameForge</div>
+    <div class="logo-sub">Implementation Guide</div>
+  </div>
+
+  <div class="phase-group">
+    <span class="phase-label">Phase 1 — Setup</span>
+    <button class="nav-item active" onclick="goTo(0)" id="nav-0">
+      <span class="step-num active-num" id="num-0">1</span> Overview & Architecture
+    </button>
+    <button class="nav-item" onclick="goTo(1)" id="nav-1">
+      <span class="step-num todo" id="num-1">2</span> Environment Setup
+    </button>
+    <button class="nav-item" onclick="goTo(2)" id="nav-2">
+      <span class="step-num todo" id="num-2">3</span> Install Dependencies
+    </button>
+    <button class="nav-item" onclick="goTo(3)" id="nav-3">
+      <span class="step-num todo" id="num-3">4</span> Configure the Server
+    </button>
+  </div>
+
+  <div class="phase-group">
+    <span class="phase-label">Phase 2 — Launch</span>
+    <button class="nav-item" onclick="goTo(4)" id="nav-4">
+      <span class="step-num todo" id="num-4">5</span> Run Locally & Test
+    </button>
+    <button class="nav-item" onclick="goTo(5)" id="nav-5">
+      <span class="step-num todo" id="num-5">6</span> Deploy to Production
+    </button>
+    <button class="nav-item" onclick="goTo(6)" id="nav-6">
+      <span class="step-num todo" id="num-6">7</span> Domain & HTTPS
+    </button>
+  </div>
+
+  <div class="phase-group">
+    <span class="phase-label">Phase 3 — Monetize</span>
+    <button class="nav-item" onclick="goTo(7)" id="nav-7">
+      <span class="step-num todo" id="num-7">8</span> Stripe Setup
+    </button>
+    <button class="nav-item" onclick="goTo(8)" id="nav-8">
+      <span class="step-num todo" id="num-8">9</span> Auth & Database
+    </button>
+    <button class="nav-item" onclick="goTo(9)" id="nav-9">
+      <span class="step-num todo" id="num-9">10</span> Launch Checklist 🚀
+    </button>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-label">
+      <span>Progress</span>
+      <span id="progress-pct">0%</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+</aside>
+
+<!-- ══ MAIN ════════════════════════════════════════════ -->
+<main class="main">
+
+<!-- ─ STEP 0: Overview ───────────────────────────── -->
+<div class="section active" id="section-0">
+  <div class="step-header">
+    <div class="step-badge">STEP 1 OF 10</div>
+    <h1 class="step-title">Overview & Architecture</h1>
+    <p class="step-desc">Before touching any code, understand the full system. FrameForge is a 3-layer stack: a frontend web app, a Python API server, and AI models that run locally on GPU.</p>
+  </div>
+
+  <div class="arch" style="grid-template-columns: 1fr auto 1fr auto 1fr;">
+    <div class="arch-box" style="border-color:rgba(96,165,250,0.3);">
+      <div class="arch-icon">🌐</div>
+      <div class="arch-name" style="color:var(--blue);">Frontend</div>
+      <div class="arch-desc">frameforge-saas.html<br/>Served by Nginx<br/>Any browser</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-box" style="border-color:rgba(74,222,128,0.3);">
+      <div class="arch-icon">⚙️</div>
+      <div class="arch-name" style="color:var(--green);">API Server</div>
+      <div class="arch-desc">server.py (FastAPI)<br/>Handles jobs, auth<br/>Port 8000</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-box" style="border-color:rgba(192,132,252,0.3);">
+      <div class="arch-icon">🤖</div>
+      <div class="arch-name" style="color:var(--purple);">AI Models</div>
+      <div class="arch-desc">LTX / SVD / CogVideoX<br/>Run on GPU<br/>Auto-downloaded</div>
+    </div>
+  </div>
+
+  <div class="arch" style="grid-template-columns: 1fr auto 1fr; margin-top: 0;">
+    <div class="arch-box" style="border-color:rgba(251,146,60,0.3);">
+      <div class="arch-icon">💳</div>
+      <div class="arch-name" style="color:var(--orange);">Stripe</div>
+      <div class="arch-desc">Payments, subscriptions<br/>Webhooks for credits<br/>Free to integrate</div>
+    </div>
+    <div class="arch-arrow">↔</div>
+    <div class="arch-box" style="border-color:rgba(251,191,36,0.3);">
+      <div class="arch-icon">🗄️</div>
+      <div class="arch-name" style="color:var(--yellow);">Database</div>
+      <div class="arch-desc">SQLite (local/dev)<br/>PostgreSQL (prod)<br/>Users, credits, history</div>
+    </div>
+  </div>
+
+  <div class="alert alert-info">
+    <span class="alert-icon">💡</span>
+    <div><strong>Key insight:</strong> The AI models run entirely on <em>your</em> server's GPU. Users interact with the web UI → your FastAPI backend queues jobs → models generate videos → results stored and served back. No third-party AI API costs.</div>
+  </div>
+
+  <h3 style="font-size:15px;font-weight:700;margin:24px 0 12px;">Pick your deployment target</h3>
+  <div class="option-grid">
+    <div class="option-btn selected" id="opt-local" onclick="selectDeploy('local')">
+      <div class="option-icon">🖥️</div>
+      <div class="option-name">Local / Home Server</div>
+      <div class="option-meta">Own GPU · Dev & testing · Free</div>
+    </div>
+    <div class="option-btn" id="opt-vps" onclick="selectDeploy('vps')">
+      <div class="option-icon">🏗️</div>
+      <div class="option-name">VPS / Dedicated</div>
+      <div class="option-meta">Hetzner · OVH · Kimsufi · $50-200/mo</div>
+    </div>
+    <div class="option-btn" id="opt-runpod" onclick="selectDeploy('runpod')">
+      <div class="option-icon">⚡</div>
+      <div class="option-name">RunPod / Vast.ai</div>
+      <div class="option-meta">Cheapest GPU cloud · $0.20-0.80/hr</div>
+    </div>
+    <div class="option-btn" id="opt-aws" onclick="selectDeploy('aws')">
+      <div class="option-icon">☁️</div>
+      <div class="option-name">AWS / GCP / Azure</div>
+      <div class="option-meta">Enterprise scale · $1-5/hr GPU</div>
+    </div>
+  </div>
+
+  <div class="cost-grid">
+    <div class="cost-card">
+      <div class="cost-name">⚡ RunPod RTX 4090</div>
+      <div class="cost-price" style="color:var(--green);">$0.74<span style="font-size:13px;color:var(--muted);">/hr</span></div>
+      <div class="cost-detail">Best price/perf ratio<br/>24GB VRAM · LTX in 30s</div>
+    </div>
+    <div class="cost-card">
+      <div class="cost-name">🏗️ Hetzner GPU Box</div>
+      <div class="cost-price" style="color:var(--blue);">$140<span style="font-size:13px;color:var(--muted);">/mo</span></div>
+      <div class="cost-detail">RTX 6000 Ada · 48GB<br/>Unlimited hours</div>
+    </div>
+    <div class="cost-card">
+      <div class="cost-name">☁️ AWS g4dn.xlarge</div>
+      <div class="cost-price" style="color:var(--orange);">$0.53<span style="font-size:13px;color:var(--muted);">/hr</span></div>
+      <div class="cost-detail">T4 16GB · Reliable<br/>Reserved = cheaper</div>
+    </div>
+  </div>
+
+  <div class="step-nav">
+    <button class="btn-nav btn-next" onclick="goTo(1)">Start Setup →</button>
+  </div>
+</div>
+
+<!-- ─ STEP 1: Environment ────────────────────────── -->
+<div class="section" id="section-1">
+  <div class="step-header">
+    <div class="step-badge">STEP 2 OF 10</div>
+    <h1 class="step-title">Environment Setup</h1>
+    <p class="step-desc">Install the base system requirements. This works on Ubuntu 22.04+ (recommended), Debian 12, or Windows with WSL2.</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('env','ubuntu')">Ubuntu/Debian</button>
+    <button class="tab-btn" onclick="switchTab('env','windows')">Windows (WSL2)</button>
+    <button class="tab-btn" onclick="switchTab('env','mac')">Mac (M1/M2/M3)</button>
+    <button class="tab-btn" onclick="switchTab('env','runpod')">RunPod</button>
+  </div>
+
+  <div class="tab-content active" id="env-ubuntu">
+    <div class="code-wrap">
+      <div class="code-header"><span class="code-filename">bash — Ubuntu 22.04+</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+      <pre><span class="hl-cmt"># 1. Update system</span>
+sudo apt update && sudo apt upgrade -y
+
+<span class="hl-cmt"># 2. Install Python 3.11</span>
+sudo apt install -y python3.11 python3.11-venv python3-pip git curl ffmpeg
+
+<span class="hl-cmt"># 3. Install NVIDIA drivers (if not already)</span>
+sudo apt install -y nvidia-driver-535
+sudo reboot  <span class="hl-cmt"># REBOOT REQUIRED</span>
+
+<span class="hl-cmt"># 4. Install CUDA 12.1 Toolkit</span>
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt install -y cuda-toolkit-12-1
+
+<span class="hl-cmt"># 5. Verify GPU is visible</span>
+nvidia-smi   <span class="hl-cmt"># should show your GPU name + VRAM</span></pre>
+    </div>
+  </div>
+
+  <div class="tab-content" id="env-windows">
+    <div class="alert alert-info">
+      <span class="alert-icon">💡</span>
+      <div>Use WSL2 (Windows Subsystem for Linux) — it gives full GPU access and a real Linux environment inside Windows.</div>
+    </div>
+    <div class="code-wrap">
+      <div class="code-header"><span class="code-filename">PowerShell (as Administrator)</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+      <pre><span class="hl-cmt"># Install WSL2 with Ubuntu 22.04</span>
+wsl --install -d Ubuntu-22.04
+<span class="hl-cmt"># Reboot when prompted, then open Ubuntu app</span>
+<span class="hl-cmt"># Inside Ubuntu terminal, follow Ubuntu steps above</span>
+
+<span class="hl-cmt"># Install NVIDIA CUDA for WSL (inside Ubuntu):</span>
+sudo apt-key del 7fa2af80
+wget https://developer.download.nvidia.com/compute/cuda/repos/wsl-ubuntu/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt install cuda-toolkit-12-1</pre>
+    </div>
+  </div>
+
+  <div class="tab-content" id="env-mac">
+    <div class="alert alert-warn">
+      <span class="alert-icon">⚠️</span>
+      <div>Apple Silicon uses MPS (Metal Performance Shaders) instead of CUDA. LTX-Video and SVD work on MPS. CogVideoX 5B may be too large. Performance is slower than NVIDIA but works.</div>
+    </div>
+    <div class="code-wrap">
+      <div class="code-header"><span class="code-filename">macOS Terminal</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+      <pre><span class="hl-cmt"># Install Homebrew if needed</span>
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+<span class="hl-cmt"># Install Python + ffmpeg</span>
+brew install python@3.11 ffmpeg git
+
+<span class="hl-cmt"># Verify MPS is available</span>
+python3 -c "import torch; print(torch.backends.mps.is_available())"
+<span class="hl-cmt"># Should print: True</span></pre>
+    </div>
+  </div>
+
+  <div class="tab-content" id="env-runpod">
+    <div class="alert alert-success">
+      <span class="alert-icon">✅</span>
+      <div>RunPod templates come with CUDA pre-installed. Use the <strong>PyTorch 2.x</strong> template — everything is already set up. Skip directly to Step 3.</div>
+    </div>
+    <div class="code-wrap">
+      <div class="code-header"><span class="code-filename">RunPod — Quick Start</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+      <pre><span class="hl-cmt"># 1. Go to runpod.io → Deploy → GPU Pods</span>
+<span class="hl-cmt"># 2. Select: RTX 4090 (best) or RTX 3090 (cheaper)</span>
+<span class="hl-cmt"># 3. Template: "RunPod PyTorch 2.2" or "PyTorch 2.x"</span>
+<span class="hl-cmt"># 4. Container Disk: 50GB minimum (models are large)</span>
+<span class="hl-cmt"># 5. Expose port 8000 in "Expose HTTP Ports"</span>
+<span class="hl-cmt"># 6. Start → Connect via Web Terminal</span>
+
+<span class="hl-cmt"># Verify GPU inside RunPod terminal:</span>
+nvidia-smi
+python3 -c "import torch; print(torch.cuda.get_device_name(0))"</pre>
+    </div>
+  </div>
+
+  <div class="step-nav">
+    <button class="btn-nav btn-prev" onclick="goTo(0)">← Back</button>
+    <button class="btn-nav btn-next" onclick="goTo(2)">Install Dependencies →</button>
+  </div>
+</div>
+
+<!-- ─ STEP 2: Install ────────────────────────────── -->
+<div class="section" id="section-2">
+  <div class="step-header">
+    <div class="step-badge">STEP 3 OF 10</div>
+    <h1 class="step-title">Install Dependencies</h1>
+    <p class="step-desc">Clone the project files and install all Python packages. This takes 5–15 minutes depending on your connection.</p>
+  </div>
+
+  <div class="code-wrap">
+    <div class="code-header"><span class="code-filename">bash — Project setup</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+    <pre><span class="hl-cmt"># 1. Create project folder</span>
+mkdir frameforge && cd frameforge
+
+<span class="hl-cmt"># 2. Create virtual environment (IMPORTANT — keeps deps isolated)</span>
+python3.11 -m venv venv
+source venv/bin/activate   <span class="hl-cmt"># Linux/Mac</span>
+<span class="hl-cmt"># venv\Scripts\activate   # Windows WSL</span>
+
+<span class="hl-cmt"># 3. Copy your files here:</span>
+<span class="hl-cmt">#   server.py            (FastAPI backend)</span>
+<span class="hl-cmt">#   saas-backend.py      (auth + billing integration)</span>
+<span class="hl-cmt">#   frameforge-saas.html (frontend)</span>
+
+<span class="hl-cmt"># 4. Install PyTorch with CUDA 12.1 support (NVIDIA)</span>
+pip install torch torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/cu121
+
+<span class="hl-cmt"># For Mac M1/M2/M3 (MPS backend):</span>
+<span class="hl-cmt"># pip install torch torchvision torchaudio</span>
+
+<span class="hl-cmt"># 5. Install all other dependencies</span>
+pip install fastapi uvicorn[standard] python-multipart \
+    diffusers>=0.30.0 transformers>=4.44.0 accelerate \
+    safetensors xformers sentencepiece \
+    imageio imageio-ffmpeg Pillow einops \
+    stripe pyjwt "passlib[bcrypt]" \
+    sqlalchemy aiosqlite python-dotenv httpx numpy
+
+<span class="hl-cmt"># 6. Verify installation</span>
+python3 -c "
+import torch, diffusers, fastapi
+print('✅ PyTorch:', torch.__version__)
+print('✅ CUDA available:', torch.cuda.is_available())
+print('✅ Diffusers:', diffusers.__version__)
+print('✅ FastAPI:', fastapi.__version__)
+if torch.cuda.is_available():
+    print('✅ GPU:', torch.cuda.get_device_name(0))
+    print('✅ VRAM:', round(torch.cuda.get_device_properties(0).total_memory/1e9, 1), 'GB')
+"</pre>
+  </div>
+
+  <div class="alert alert-warn">
+    <span class="alert-icon">⚠️</span>
+    <div><strong>xformers install fails?</strong> That's okay — it's optional (just speeds things up). Remove it from the pip command and everything still works. It only helps on NVIDIA GPUs.</div>
+  </div>
+
+  <div class="alert alert-info">
+    <span class="alert-icon">💡</span>
+    <div><strong>Model download sizes:</strong> LTX-Video ≈ 9GB, SVD XT ≈ 9GB, CogVideoX 5B ≈ 20GB. They auto-download on first use into <code style="color:var(--green);">./model_cache/</code>. Make sure you have enough disk space.</div>
+  </div>
+
+  <div class="step-nav">
+    <button class="btn-nav btn-prev" onclick="goTo(1)">← Back</button>
+    <button class="btn-nav btn-next" onclick="goTo(3)">Configure Server →</button>
+  </div>
+</div>
+
+<!-- ─ STEP 3: Configure ──────────────────────────── -->
+<div class="section" id="section-3">
+  <div class="step-header">
+    <div class="step-badge">STEP 4 OF 10</div>
+    <h1 class="step-title">Configure the Server</h1>
+    <p class="step-desc">Create your <code style="color:var(--green);">.env</code> file with all secrets. Never commit this file to git.</p>
+  </div>
+
+  <div class="code-wrap">
+    <div class="code-header"><span class="code-filename">.env — create this file</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+    <pre><span class="hl-cmt"># ── Server ──────────────────────────────────────</span>
+<span class="hl-key">HOST</span>=<span class="hl-val">0.0.0.0</span>
+<span class="hl-key">PORT</span>=<span class="hl-val">8000</span>
+<span class="hl-key">ENVIRONMENT</span>=<span class="hl-val">production</span>   <span class="hl-cmt"># or "development"</span>
+
+<span class="hl-cmt"># ── Auth (generate with: python3 -c "import secrets; print(secrets.token_hex(32))")</span>
+<span class="hl-key">JWT_SECRET</span>=<span class="hl-val">your-super-secret-256-bit-key-here</span>
+
+<span class="hl-cmt"># ── Database ─────────────────────────────────────</span>
+<span class="hl-key">DATABASE_URL</span>=<span class="hl-val">sqlite+aiosqlite:///frameforge.db</span>
+<span class="hl-cmt"># For production PostgreSQL:</span>
+<span class="hl-cmt"># DATABASE_URL=postgresql+asyncpg://user:pass@localhost/frameforge</span>
+
+<span class="hl-cmt"># ── Stripe (get from dashboard.stripe.com) ───────</span>
+<span class="hl-key">STRIPE_SECRET_KEY</span>=<span class="hl-val">sk_live_...</span>
+<span class="hl-key">STRIPE_WEBHOOK_SECRET</span>=<span class="hl-val">whsec_...</span>
+<span class="hl-key">STRIPE_PUB_KEY</span>=<span class="hl-val">pk_live_...</span>
+
+<span class="hl-cmt"># ── App ──────────────────────────────────────────</span>
+<span class="hl-key">APP_URL</span>=<span class="hl-val">https://yourdomain.com</span>
+<span class="hl-key">MODEL_CACHE_DIR</span>=<span class="hl-val">./model_cache</span>
+<span class="hl-key">OUTPUT_DIR</span>=<span class="hl-val">./outputs</span>
+
+<span class="hl-cmt"># ── Optional: Email (for transactional emails) ───</span>
+<span class="hl-key">SMTP_HOST</span>=<span class="hl-val">smtp.resend.com</span>
+<span class="hl-key">SMTP_PORT</span>=<span class="hl-val">465</span>
+<span class="hl-key">SMTP_USER</span>=<span class="hl-val">resend</span>
+<span class="hl-key">SMTP_PASS</span>=<span class="hl-val">re_...</span></pre>
+  </div>
+
+  <div class="code-wrap">
+    <div class="code-header"><span class="code-filename">bash — Generate JWT secret</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+    <pre>python3 -c "import secrets; print(secrets.token_hex(32))"
+<span class="hl-cmt"># Copy the output → paste as JWT_SECRET in .env</span></pre>
+  </div>
+
+  <div class="code-wrap">
+    <div class="code-header"><span class="code-filename">.gitignore — protect your secrets</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+    <pre>.env
+*.db
+model_cache/
+outputs/
+venv/
+__pycache__/
+*.pyc</pre>
+  </div>
+
+  <div class="step-nav">
+    <button class="btn-nav btn-prev" onclick="goTo(2)">← Back</button>
+    <button class="btn-nav btn-next" onclick="goTo(4)">Test Locally →</button>
+  </div>
+</div>
+
+<!-- ─ STEP 4: Run Locally ────────────────────────── -->
+<div class="section" id="section-4">
+  <div class="step-header">
+    <div class="step-badge">STEP 5 OF 10</div>
+    <h1 class="step-title">Run Locally & Test</h1>
+    <p class="step-desc">Start the server and generate your first video to confirm everything works before deploying.</p>
+  </div>
+
+  <div class="code-wrap">
+    <div class="code-header"><span class="code-filename">bash — Start the server</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+    <pre><span class="hl-cmt"># Activate venv if not already active</span>
+source venv/bin/activate
+
+<span class="hl-cmt"># Start FastAPI server</span>
+uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+
+<span class="hl-cmt"># You should see:</span>
+<span class="hl-cmt"># INFO: Uvicorn running on http://0.0.0.0:8000</span>
+<span class="hl-cmt"># INFO: Device: CUDA | dtype: torch.float16</span></pre>
+  </div>
+
+  <div class="code-wrap">
+    <div class="code-header"><span class="code-filename">bash — Test the API</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+    <pre><span class="hl-cmt"># Open a second terminal — test the health endpoint</span>
+curl http://localhost:8000/
+<span class="hl-cmt"># {"message":"FrameForge API","status":"running","device":"cuda"}</span>
+
+<span class="hl-cmt"># List available models</span>
+curl http://localhost:8000/models | python3 -m json.tool
+
+<span class="hl-cmt"># Generate your first video (LTX-Video, fast)</span>
+curl -X POST http://localhost:8000/generate/text-to-video \
+  -F "prompt=A golden sunset over the ocean, cinematic" \
+  -F "model_key=ltx-video" \
+  -F "num_frames=49" \
+  -F "steps=30"
+
+<span class="hl-cmt"># Get a job_id back, then poll:</span>
+curl http://localhost:8000/job/YOUR_JOB_ID_HERE</pre>
+  </div>
+
+  <div class="code-wrap">
+    <div class="code-header"><span class="code-filename">bash — Open the UI</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+    <pre><span class="hl-cmt"># Serve the HTML file with Python (for testing)</span>
+python3 -m http.server 3000
+
+<span class="hl-cmt"># Open browser → http://localhost:3000/frameforge-saas.html</span>
+<span class="hl-cmt"># Set server URL in UI → Advanced → http://localhost:8000</span></pre>
+  </div>
+
+  <div class="alert alert-success">
+    <span class="alert-icon">✅</span>
+    <div><strong>First run takes longer</strong> — the model downloads automatically (~9GB for LTX-Video). Subsequent runs use the cached model and start in seconds.</div>
+  </div>
+
+  <div class="alert alert-danger">
+    <span class="alert-icon">🔴</span>
+    <div><strong>CUDA out of memory?</strong> Reduce <code>num_frames</code> to 25 or switch to <code>svd-base</code> or <code>zeroscope-v2</code> which use less VRAM. Also try adding <code>--workers 1</code> to uvicorn.</div>
+  </div>
+
+  <div class="step-nav">
+    <button class="btn-nav btn-prev" onclick="goTo(3)">← Back</button>
+    <button class="btn-nav btn-next" onclick="goTo(5)">Deploy to Production →</button>
+  </div>
+</div>
+
+<!-- ─ STEP 5: Deploy ─────────────────────────────── -->
+<div class="section" id="section-5">
+  <div class="step-header">
+    <div class="step-badge">STEP 6 OF 10</div>
+    <h1 class="step-title">Deploy to Production</h1>
+    <p class="step-desc">Use systemd + Nginx for a rock-solid production deployment. The server runs as a background service and auto-restarts on crash.</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('deploy','systemd')">VPS (Systemd)</button>
+    <button class="tab-btn" onclick="switchTab('deploy','docker')">Docker</button>
+    <button class="tab-btn" onclick="switchTab('deploy','runpod2')">RunPod</button>
+  </div>
+
+  <div class="tab-content active" id="deploy-systemd">
+    <div class="code-wrap">
+      <div class="code-header"><span class="code-filename">/etc/systemd/system/frameforge.service</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+      <pre>[Unit]
+Description=FrameForge AI Video Server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/frameforge
+EnvironmentFile=/home/ubuntu/frameforge/.env
+ExecStart=/home/ubuntu/frameforge/venv/bin/uvicorn server:app \
+    --host 0.0.0.0 --port 8000 --workers 1
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target</pre>
+    </div>
+    <div class="code-wrap">
+      <div class="code-header"><span class="code-filename">bash — Enable & start the service</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+      <pre>sudo systemctl daemon-reload
+sudo systemctl enable frameforge
+sudo systemctl start frameforge
+
+<span class="hl-cmt"># Check status</span>
+sudo systemctl status frameforge
+
+<span class="hl-cmt"># View logs</span>
+sudo journalctl -u frameforge -f</pre>
+    </div>
+    <div class="code-wrap">
+      <div class="code-header"><span class="code-filename">/etc/nginx/sites-available/frameforge</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+      <pre>server {
+    listen 80;
+    server_name yourdomain.com www.yourdomain.com;
+
+    <span class="hl-cmt"># Serve the HTML frontend</span>
+    root /home/ubuntu/frameforge;
+    index frameforge-saas.html;
+
+    <span class="hl-cmt"># Proxy API calls to FastAPI</span>
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 300s;    <span class="hl-cmt"># long for video generation</span>
+        client_max_body_size 50M;   <span class="hl-cmt"># allow image uploads</span>
+    }
+
+    <span class="hl-cmt"># Serve generated videos directly</span>
+    location /outputs/ {
+        alias /home/ubuntu/frameforge/outputs/;
+        add_header Cache-Control "public, max-age=86400";
+    }
+}</pre>
+    </div>
+    <div class="code-wrap">
+      <div class="code-header"><span class="code-filename">bash — Enable Nginx</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+      <pre>sudo ln -s /etc/nginx/sites-available/frameforge /etc/nginx/sites-enabled/
+sudo nginx -t       <span class="hl-cmt"># test config</span>
+sudo systemctl restart nginx</pre>
+    </div>
+  </div>
+
+  <div class="tab-content" id="deploy-docker">
+    <div class="code-wrap">
+      <div class="code-header"><span class="code-filename">Dockerfile</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+      <pre>FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+
+WORKDIR /app
+
+<span class="hl-cmt"># System deps</span>
+RUN apt-get update && apt-get install -y ffmpeg git && rm -rf /var/lib/apt/lists/*
+
+<span class="hl-cmt"># Python deps</span>
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+<span class="hl-cmt"># App files</span>
+COPY server.py saas-backend.py frameforge-saas.html ./
+
+<span class="hl-cmt"># Persistent volumes</span>
+VOLUME ["/app/model_cache", "/app/outputs"]
+
+EXPOSE 8000
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]</pre>
+    </div>
+    <div class="code-wrap">
+      <div class="code-header"><span class="code-filename">docker-compose.yml</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+      <pre>version: '3.8'
+services:
+  frameforge:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./model_cache:/app/model_cache
+      - ./outputs:/app/outputs
+      - ./.env:/app/.env
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped</pre>
+    </div>
+    <div class="code-wrap">
+      <div class="code-header"><span class="code-filename">bash — Run with Docker</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+      <pre><span class="hl-cmt"># Install nvidia-container-toolkit first:</span>
+sudo apt install -y nvidia-container-toolkit
+sudo systemctl restart docker
+
+<span class="hl-cmt"># Build and run</span>
+docker-compose up -d
+
+<span class="hl-cmt"># Check logs</span>
+docker-compose logs -f frameforge</pre>
+    </div>
+  </div>
+
+  <div class="tab-content" id="deploy-runpod2">
+    <div class="code-wrap">
+      <div class="code-header"><span class="code-filename">RunPod — Setup commands</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+      <pre><span class="hl-cmt"># Inside RunPod web terminal</span>
+cd /workspace
+git clone https://github.com/yourusername/frameforge.git
+cd frameforge
+
+<span class="hl-cmt"># Install deps (CUDA already available)</span>
+pip install fastapi uvicorn diffusers transformers accelerate \
+    xformers imageio imageio-ffmpeg Pillow stripe pyjwt \
+    "passlib[bcrypt]" sqlalchemy aiosqlite
+
+<span class="hl-cmt"># Copy your .env</span>
+nano .env   <span class="hl-cmt"># paste your env vars</span>
+
+<span class="hl-cmt"># Start with nohup (survives terminal close)</span>
+nohup uvicorn server:app --host 0.0.0.0 --port 8000 &
+
+<span class="hl-cmt"># RunPod gives you a public URL like:</span>
+<span class="hl-cmt"># https://abc123-8000.proxy.runpod.net</span>
+<span class="hl-cmt"># Use this as your server URL in the frontend</span></pre>
+    </div>
+    <div class="alert alert-info">
+      <span class="alert-icon">💡</span>
+      <div>RunPod charges per hour only when the pod is running. For a SaaS with low initial traffic, start the pod when you need it and stop it when idle. Use a <strong>Network Volume</strong> to persist models between pod restarts (avoid re-downloading 30GB each time).</div>
+    </div>
+  </div>
+
+  <div class="step-nav">
+    <button class="btn-nav btn-prev" onclick="goTo(4)">← Back</button>
+    <button class="btn-nav btn-next" onclick="goTo(6)">Domain & HTTPS →</button>
+  </div>
+</div>
+
+<!-- ─ STEP 6: Domain & HTTPS ─────────────────────── -->
+<div class="section" id="section-6">
+  <div class="step-header">
+    <div class="step-badge">STEP 7 OF 10</div>
+    <h1 class="step-title">Domain & HTTPS</h1>
+    <p class="step-desc">Point a domain to your server and get a free SSL certificate. This makes your site secure and professional.</p>
+  </div>
+
+  <div class="card" style="border-color:rgba(74,222,128,0.25);">
+    <div class="card-title">📋 DNS Setup (any registrar)</div>
+    <div class="card-desc" style="margin-top:8px;">
+      <table class="env-table">
+        <tr><th>Type</th><th>Name</th><th>Value</th><th>Notes</th></tr>
+        <tr><td>A</td><td>@</td><td>YOUR.SERVER.IP</td><td>Root domain</td></tr>
+        <tr><td>A</td><td>www</td><td>YOUR.SERVER.IP</td><td>www subdomain</td></tr>
+        <tr><td>A</td><td>api</td><td>YOUR.SERVER.IP</td><td>API subdomain (optional)</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="code-wrap">
+    <div class="code-header"><span class="code-filename">bash — Free SSL with Certbot (Let's Encrypt)</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+    <pre><span class="hl-cmt"># Install Certbot</span>
+sudo apt install -y certbot python3-certbot-nginx
+
+<span class="hl-cmt"># Get certificate (auto-configures Nginx)</span>
+sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
+
+<span class="hl-cmt"># Auto-renew is set up automatically. Test it:</span>
+sudo certbot renew --dry-run
+
+<span class="hl-cmt"># Nginx now serves HTTPS on port 443 automatically</span>
+<span class="hl-cmt"># HTTP on port 80 redirects to HTTPS</span></pre>
+  </div>
+
+  <div class="alert alert-success">
+    <span class="alert-icon">✅</span>
+    <div>After SSL is configured, your site is live at <strong>https://yourdomain.com</strong>. Update <code>APP_URL</code> in your <code>.env</code> to match, and update the Stripe webhook URL to your new domain.</div>
+  </div>
+
+  <div class="step-nav">
+    <button class="btn-nav btn-prev" onclick="goTo(5)">← Back</button>
+    <button class="btn-nav btn-next" onclick="goTo(7)">Setup Stripe →</button>
+  </div>
+</div>
+
+<!-- ─ STEP 7: Stripe ─────────────────────────────── -->
+<div class="section" id="section-7">
+  <div class="step-header">
+    <div class="step-badge">STEP 8 OF 10</div>
+    <h1 class="step-title">Stripe Setup</h1>
+    <p class="step-desc">Create your products and prices in Stripe, then wire up the webhooks. This handles all your payment flows automatically.</p>
+  </div>
+
+  <ul class="checklist" id="stripe-checklist">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Click each item to mark as done</div>
+    <li class="check-item" onclick="toggleCheck(this)">
+      <div class="check-box">✓</div>
+      <div class="check-text"><strong>Create Stripe account</strong> at stripe.com (free, instant)</div>
+    </li>
+    <li class="check-item" onclick="toggleCheck(this)">
+      <div class="check-box">✓</div>
+      <div class="check-text"><strong>Enable test mode</strong> — Dashboard → toggle "Test mode" ON (top right)</div>
+    </li>
+    <li class="check-item" onclick="toggleCheck(this)">
+      <div class="check-box">✓</div>
+      <div class="check-text"><strong>Create Products</strong> — Dashboard → Products → Add product:<br/>
+        • "FrameForge Pro" → $19/month recurring<br/>
+        • "FrameForge Team" → $49/month recurring<br/>
+        • "Credits 100" → $5 one-time<br/>
+        • "Credits 300" → $12 one-time<br/>
+        • "Credits 1000" → $35 one-time<br/>
+        • "Credits 5000" → $150 one-time</div>
+    </li>
+    <li class="check-item" onclick="toggleCheck(this)">
+      <div class="check-box">✓</div>
+      <div class="check-text"><strong>Copy Price IDs</strong> — click each price → copy the <code style="color:var(--green);">price_xxx</code> ID → paste into <code>saas-backend.py → STRIPE_PRICES dict</code></div>
+    </li>
+    <li class="check-item" onclick="toggleCheck(this)">
+      <div class="check-box">✓</div>
+      <div class="check-text"><strong>Get API Keys</strong> — Dashboard → Developers → API Keys → copy Secret key → paste into <code>.env → STRIPE_SECRET_KEY</code></div>
+    </li>
+    <li class="check-item" onclick="toggleCheck(this)">
+      <div class="check-box">✓</div>
+      <div class="check-text"><strong>Setup Webhook</strong> — Developers → Webhooks → Add endpoint:<br/>
+        URL: <code style="color:var(--green);">https://yourdomain.com/billing/webhook</code><br/>
+        Events: <code>checkout.session.completed</code>, <code>invoice.paid</code>, <code>customer.subscription.deleted</code></div>
+    </li>
+    <li class="check-item" onclick="toggleCheck(this)">
+      <div class="check-box">✓</div>
+      <div class="check-text"><strong>Copy Webhook Secret</strong> — click the webhook → reveal signing secret → paste into <code>.env → STRIPE_WEBHOOK_SECRET</code></div>
+    </li>
+  </ul>
+
+  <div class="code-wrap">
+    <div class="code-header"><span class="code-filename">bash — Test Stripe webhook locally</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+    <pre><span class="hl-cmt"># Install Stripe CLI (for local webhook testing)</span>
+curl -fsSL https://packages.stripe.dev/api/security/keypair/stripe-cli-gpg/public | \
+    gpg --dearmor | sudo tee /usr/share/keyrings/stripe.gpg > /dev/null
+echo "deb [signed-by=/usr/share/keyrings/stripe.gpg]" \
+    "https://packages.stripe.dev/stripe-cli-debian-local stable main" | \
+    sudo tee /etc/apt/sources.list.d/stripe.list > /dev/null
+sudo apt update && sudo apt install stripe
+
+<span class="hl-cmt"># Forward webhooks to your local server</span>
+stripe listen --forward-to localhost:8000/billing/webhook
+
+<span class="hl-cmt"># In another terminal — trigger a test payment</span>
+stripe trigger checkout.session.completed</pre>
+  </div>
+
+  <div class="step-nav">
+    <button class="btn-nav btn-prev" onclick="goTo(6)">← Back</button>
+    <button class="btn-nav btn-next" onclick="goTo(8)">Auth & Database →</button>
+  </div>
+</div>
+
+<!-- ─ STEP 8: Auth ───────────────────────────────── -->
+<div class="section" id="section-8">
+  <div class="step-header">
+    <div class="step-badge">STEP 9 OF 10</div>
+    <h1 class="step-title">Auth & Database</h1>
+    <p class="step-desc">Integrate the auth system from <code style="color:var(--green);">saas-backend.py</code> into <code style="color:var(--green);">server.py</code> and initialize the database.</p>
+  </div>
+
+  <div class="code-wrap">
+    <div class="code-header"><span class="code-filename">server.py — add these lines at the top</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+    <pre><span class="hl-cmt"># Add to imports section of server.py:</span>
+from dotenv import load_dotenv
+load_dotenv()  <span class="hl-cmt"># loads your .env file</span>
+
+<span class="hl-cmt"># Import everything from saas-backend.py:</span>
+from saas_backend import (
+    init_db, get_db, get_current_user,
+    User, Generation, ApiKey,
+    hash_password, create_jwt,
+    CREDIT_COSTS, deduct_credits,
+    signup, login, me,
+    create_checkout, stripe_webhook,
+    create_api_key, list_api_keys, revoke_api_key
+)
+
+<span class="hl-cmt"># Add startup event to initialize DB:</span>
+@app.on_event("startup")
+async def startup():
+    await init_db()
+    log.info("✅ Database initialized")
+
+<span class="hl-cmt"># Register auth routes:</span>
+app.post("/auth/signup")(signup)
+app.post("/auth/login")(login)
+app.get("/auth/me")(me)
+app.post("/billing/checkout")(create_checkout)
+app.post("/billing/webhook")(stripe_webhook)
+app.post("/api-keys")(create_api_key)
+app.get("/api-keys")(list_api_keys)
+app.delete("/api-keys/{key_id}")(revoke_api_key)</pre>
+  </div>
+
+  <div class="code-wrap">
+    <div class="code-header"><span class="code-filename">server.py — protect generate endpoints</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+    <pre><span class="hl-cmt"># Update text-to-video to require auth + deduct credits:</span>
+@app.post("/generate/text-to-video")
+async def text_to_video(background_tasks: BackgroundTasks,
+    prompt: str = Form(...),
+    model_key: str = Form("ltx-video"),
+    <span class="hl-cmt"># ... other params ...</span>
+    user: User = Depends(get_current_user),   <span class="hl-cmt"># ADD THIS</span>
+    db: AsyncSession = Depends(get_db),       <span class="hl-cmt"># ADD THIS</span>
+):
+    <span class="hl-cmt"># Deduct credits before queuing job</span>
+    cost = await deduct_credits(user.id, model_key, db)
+
+    job_id = str(uuid.uuid4())
+    params = dict(
+        model_key=model_key, prompt=prompt,
+        user_id=user.id, credits_cost=cost,
+        <span class="hl-cmt"># ... rest of params</span>
+    )
+    JOBS[job_id] = {"status": "queued", "progress": 0}
+    background_tasks.add_task(run_generation_job, job_id, params)
+    return {"job_id": job_id, "credits_remaining": user.credits - cost}</pre>
+  </div>
+
+  <div class="code-wrap">
+    <div class="code-header"><span class="code-filename">bash — Initialize database</span><button class="code-copy" onclick="copyCode(this)">Copy</button></div>
+    <pre><span class="hl-cmt"># Just start the server — DB auto-creates on first run</span>
+uvicorn server:app --host 0.0.0.0 --port 8000
+
+<span class="hl-cmt"># Verify tables were created:</span>
+python3 -c "
+import sqlite3
+conn = sqlite3.connect('frameforge.db')
+tables = conn.execute(\"SELECT name FROM sqlite_master WHERE type='table'\").fetchall()
+print('Tables:', [t[0] for t in tables])
+"
+<span class="hl-cmt"># Should print: Tables: ['users', 'api_keys', 'generations']</span></pre>
+  </div>
+
+  <div class="step-nav">
+    <button class="btn-nav btn-prev" onclick="goTo(7)">← Back</button>
+    <button class="btn-nav btn-next" onclick="goTo(9)">Launch Checklist →</button>
+  </div>
+</div>
+
+<!-- ─ STEP 9: Launch ─────────────────────────────── -->
+<div class="section" id="section-9">
+  <div class="step-header">
+    <div class="step-badge">STEP 10 OF 10</div>
+    <h1 class="step-title">Launch Checklist 🚀</h1>
+    <p class="step-desc">Final checks before going live. Mark each item as you complete it.</p>
+  </div>
+
+  <ul class="checklist">
+    <li class="check-item" onclick="toggleCheck(this)"><div class="check-box">✓</div><div class="check-text">Server runs on GPU with <code>nvidia-smi</code> showing correct VRAM</div></li>
+    <li class="check-item" onclick="toggleCheck(this)"><div class="check-box">✓</div><div class="check-text">Test video generated successfully — LTX-Video with 25 frames</div></li>
+    <li class="check-item" onclick="toggleCheck(this)"><div class="check-box">✓</div><div class="check-text">Domain DNS pointing to server IP (verify with <code>ping yourdomain.com</code>)</div></li>
+    <li class="check-item" onclick="toggleCheck(this)"><div class="check-box">✓</div><div class="check-text">HTTPS working — browser shows padlock on <code>https://yourdomain.com</code></div></li>
+    <li class="check-item" onclick="toggleCheck(this)"><div class="check-box">✓</div><div class="check-text">Signup flow tested end-to-end — create account, receive 50 credits</div></li>
+    <li class="check-item" onclick="toggleCheck(this)"><div class="check-box">✓</div><div class="check-text">Stripe test payment completed — credits added to account after checkout</div></li>
+    <li class="check-item" onclick="toggleCheck(this)"><div class="check-box">✓</div><div class="check-text">Webhook verified — <code>stripe trigger checkout.session.completed</code> → credits updated</div></li>
+    <li class="check-item" onclick="toggleCheck(this)"><div class="check-box">✓</div><div class="check-text">Switch Stripe from test mode to <strong>live mode</strong> — update API keys in .env</div></li>
+    <li class="check-item" onclick="toggleCheck(this)"><div class="check-box">✓</div><div class="check-text">Systemd service enabled (<code>sudo systemctl enable frameforge</code>)</div></li>
+    <li class="check-item" onclick="toggleCheck(this)"><div class="check-box">✓</div><div class="check-text">Output directory has enough disk space (50GB+ recommended)</div></li>
+    <li class="check-item" onclick="toggleCheck(this)"><div class="check-box">✓</div><div class="check-text">Set up log monitoring — <code>journalctl -u frameforge</code> or Grafana/Loki</div></li>
+    <li class="check-item" onclick="toggleCheck(this)"><div class="check-box">✓</div><div class="check-text">Add your SaaS to ProductHunt, HackerNews, Reddit r/SideProject</div></li>
+  </ul>
+
+  <div id="launch-success" class="success-hero hidden">
+    <div class="success-icon">🎬</div>
+    <h2 class="success-title">You're live! 🚀</h2>
+    <p style="color:var(--muted);font-size:15px;font-weight:300;max-width:400px;margin:0 auto;line-height:1.6;">
+      FrameForge is running in production. Start sharing it with the world.
+    </p>
+    <div class="success-links">
+      <button class="success-link" style="background:var(--green);color:#000;" onclick="window.open('https://www.producthunt.com/posts/new','_blank')">Submit to ProductHunt</button>
+      <button class="success-link" style="background:var(--surface);border:1px solid var(--border2);color:var(--text);" onclick="window.open('https://news.ycombinator.com/submit','_blank')">Post to HackerNews</button>
+      <button class="success-link" style="background:var(--surface);border:1px solid var(--border2);color:var(--text);" onclick="window.open('https://reddit.com/r/SideProject/submit','_blank')">Reddit r/SideProject</button>
+      <button class="success-link" style="background:var(--surface);border:1px solid var(--border2);color:var(--text);" onclick="window.open('https://twitter.com/compose/tweet','_blank')">Tweet it out 🐦</button>
+    </div>
+  </div>
+
+  <div class="step-nav">
+    <button class="btn-nav btn-prev" onclick="goTo(8)">← Back</button>
+    <button class="btn-nav btn-next" style="background:var(--purple);color:#fff;" onclick="showSuccess()">🚀 I'm Live!</button>
+  </div>
+</div>
+
+</main>
+</div>
+
+<script>
+let currentStep = 0;
+const TOTAL = 10;
+
+function goTo(step) {
+  document.getElementById(`section-${currentStep}`).classList.remove('active');
+  document.getElementById(`nav-${currentStep}`).classList.remove('active');
+  const numEl = document.getElementById(`num-${currentStep}`);
+  numEl.classList.remove('active-num');
+  if (step > currentStep) {
+    numEl.classList.add('done');
+    numEl.textContent = '✓';
+  } else {
+    numEl.classList.add('todo');
+  }
+
+  currentStep = step;
+  document.getElementById(`section-${step}`).classList.add('active');
+  document.getElementById(`nav-${step}`).classList.add('active');
+  const newNum = document.getElementById(`num-${step}`);
+  newNum.classList.remove('todo','done');
+  newNum.classList.add('active-num');
+
+  // Update progress
+  const pct = Math.round((step / (TOTAL - 1)) * 100);
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-pct').textContent = pct + '%';
+
+  window.scrollTo(0, 0);
+}
+
+function switchTab(group, id) {
+  document.querySelectorAll(`#section-${currentStep} .tab-btn`).forEach((btn, i) => {
+    const tabs = document.querySelectorAll(`#section-${currentStep} .tab-content`);
+    btn.classList.remove('active');
+    tabs[i]?.classList.remove('active');
+  });
+  event.target.classList.add('active');
+  document.getElementById(`${group}-${id}`).classList.add('active');
+}
+
+function toggleCheck(el) {
+  el.classList.toggle('done');
+}
+
+function selectDeploy(opt) {
+  ['local','vps','runpod','aws'].forEach(o => {
+    document.getElementById(`opt-${o}`)?.classList.remove('selected');
+  });
+  document.getElementById(`opt-${opt}`)?.classList.add('selected');
+}
+
+function copyCode(btn) {
+  const pre = btn.closest('.code-wrap').querySelector('pre');
+  const text = pre.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied!';
+    btn.style.color = 'var(--green)';
+    setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1800);
+  });
+}
+
+function showSuccess() {
+  document.getElementById('launch-success').classList.remove('hidden');
+  document.getElementById('launch-success').scrollIntoView({behavior:'smooth'});
+}
+</script>
+</body>
+</html>
