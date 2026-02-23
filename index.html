@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>ClipZero — Free AI Video Generator</title>
-<meta name="description" content="Generate AI videos free every day. No signup, no payment. Powered by LTX-Video and CogVideoX. Watch ads to earn more credits."/>
+<meta name="description" content="Generate AI videos free every day. No signup, no payment. Powered by Hugging Face AI models. Watch ads to earn more credits."/>
 
 <!-- ═══════════════════════════════════════════════════════
      GOOGLE ADSENSE — Replace ca-pub-XXXX with your ID
@@ -538,9 +538,9 @@ footer { background: var(--ink2); padding: 36px 32px 24px; }
 
     <!-- API Key notice -->
     <div style="background:var(--paper2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;">
-      <div style="font-size:10px;font-family:var(--mono);color:var(--muted);margin-bottom:6px;">FAL.AI API KEY (free tier) — <a href="https://fal.ai" target="_blank" style="color:var(--fire);text-decoration:none;">get yours free at fal.ai</a></div>
-      <input type="password" id="fal-key" placeholder="fal_sk_••••••••••••••••••••••••••••••••" style="width:100%;background:var(--paper);border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-family:var(--mono);font-size:12px;color:var(--text);" oninput="saveFalKey(this.value)"/>
-      <div style="font-size:10px;color:var(--muted);margin-top:5px;">Key stored locally in your browser only. Never sent to our servers.</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--muted);margin-bottom:6px;">HUGGING FACE TOKEN (free) — <a href="https://huggingface.co/settings/tokens" target="_blank" style="color:var(--fire);text-decoration:none;">get yours free at huggingface.co/settings/tokens</a></div>
+      <input type="password" id="fal-key" placeholder="hf_••••••••••••••••••••••••••••••••••" style="width:100%;background:var(--paper);border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-family:var(--mono);font-size:12px;color:var(--text);" oninput="saveHfKey(this.value)"/>
+      <div style="font-size:10px;color:var(--muted);margin-top:5px;">Token starts with <strong>hf_</strong> · stored locally in your browser only · never sent to our servers.</div>
     </div>
 
     <!-- Error -->
@@ -705,20 +705,18 @@ const DAILY_CREDITS = 5;
 const AD_CREDITS    = 3;
 const AD_SECONDS    = 15;
 
-// fal.ai model IDs (real endpoints — swap for actual fal.ai model IDs)
-// Get your free API key at https://fal.ai — free tier included
+// Hugging Face model IDs — used via HF Inference API (router.huggingface.co)
+// Get your free token at https://huggingface.co/settings/tokens
 const FAL_MODELS = {
   't2v': [
-    { key: 'fal-ai/ltx-video',         name: 'LTX-Video 2.0',    badge:'NEW',  bc:'b-new',  meta:'Fastest · Audio support', cost:1 },
-    { key: 'fal-ai/cogvideox-5b',       name: 'CogVideoX 5B',     badge:'BEST', bc:'b-best', meta:'Highest quality · 49fr',   cost:2 },
-    { key: 'fal-ai/cogvideox-2b',       name: 'CogVideoX 2B',     badge:'FREE', bc:'b-free', meta:'Fast · 6GB VRAM',          cost:1 },
-    { key: 'fal-ai/animatediff-v2v',    name: 'AnimateDiff XL',   badge:'FREE', bc:'b-free', meta:'SDXL · 16 frames',         cost:1 },
-    { key: 'fal-ai/zeroscope-v2-xl',    name: 'ZeroScope v2',     badge:'FAST', bc:'b-fast', meta:'Lightweight · Quick',      cost:1 },
+    { key: 'ali-vilab/text-to-video-ms-1.7b', name: 'ModelScope T2V',  badge:'FREE', bc:'b-free', meta:'1.7B · Fast · Free tier', cost:1 },
+    { key: 'cerspense/zeroscope_v2_576w',      name: 'ZeroScope v2',    badge:'FAST', bc:'b-fast', meta:'576p · Lightweight',      cost:1 },
+    { key: 'damo-vilab/text-to-video-ms-1.7b', name: 'DAMO T2V',        badge:'FREE', bc:'b-free', meta:'Stable · Reliable',       cost:1 },
+    { key: 'Wan-AI/Wan2.1-T2V-1.3B',           name: 'Wan2.1 T2V',      badge:'NEW',  bc:'b-new',  meta:'1.3B · Latest',           cost:1 },
   ],
   'i2v': [
-    { key: 'fal-ai/stable-video-diffusion', name: 'SVD XT',         badge:'FREE', bc:'b-free', meta:'Best I2V · 25 frames', cost:1 },
-    { key: 'fal-ai/ltx-video-i2v',          name: 'LTX-Video I2V',  badge:'NEW',  bc:'b-new',  meta:'97 frames · Fast',     cost:1 },
-    { key: 'fal-ai/cogvideox-i2v',          name: 'CogVideoX I2V',  badge:'BEST', bc:'b-best', meta:'Highest quality',      cost:2 },
+    { key: 'stabilityai/stable-video-diffusion-img2vid-xt', name: 'SVD XT',      badge:'FREE', bc:'b-free', meta:'Best I2V · 25 frames', cost:1 },
+    { key: 'stabilityai/stable-video-diffusion-img2vid',    name: 'SVD Base',    badge:'FAST', bc:'b-fast', meta:'14 frames · Faster',   cost:1 },
   ]
 };
 
@@ -749,8 +747,8 @@ function loadState() {
   } catch { return { date: today, credits: DAILY_CREDITS, history: [] }; }
 }
 function saveState() { localStorage.setItem('cz_state', JSON.stringify(S)); }
-function loadFalKey() { return localStorage.getItem('cz_fal_key') || ''; }
-function saveFalKey(k) { localStorage.setItem('cz_fal_key', k); }
+function loadHfKey() { return localStorage.getItem('cz_hf_key') || ''; }
+function saveHfKey(k) { localStorage.setItem('cz_hf_key', k); }
 
 let S = loadState();
 let genMode   = 't2v';
@@ -772,7 +770,7 @@ function renderAll() {
   renderQualities();
   renderHints();
   renderHistory();
-  document.getElementById('fal-key').value = loadFalKey();
+  document.getElementById('fal-key').value = loadHfKey();
 }
 
 function renderCredits() {
@@ -892,20 +890,22 @@ function clearImg() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  GENERATE — calls fal.ai REST API directly from browser
+//  GENERATE — calls Hugging Face Inference API directly from browser
+//  Docs: https://huggingface.co/docs/api-inference
 // ═══════════════════════════════════════════════════════════════
 async function doGenerate() {
   const cost   = calcCost();
   const prompt = genMode==='t2v'
     ? document.getElementById('prompt').value.trim()
     : document.getElementById('i2v-prompt').value.trim();
-  const falKey = loadFalKey();
+  const hfKey = loadHfKey();
 
   // Validation
   hideErr();
   if (genMode==='t2v' && !prompt) { showErr('Please enter a prompt first.'); return; }
   if (genMode==='i2v' && !uploadDataUrl) { showErr('Please upload an image first.'); return; }
-  if (!falKey) { showErr('Enter your fal.ai API key above. Get a free one at fal.ai — no credit card needed.'); return; }
+  if (!hfKey) { showErr('Enter your Hugging Face token above. Get a free one at huggingface.co/settings/tokens — no credit card needed.'); return; }
+  if (!hfKey.startsWith('hf_')) { showErr('Token looks wrong — Hugging Face tokens start with "hf_". Check and paste it again.'); return; }
   if (S.credits < cost) {
     document.getElementById('no-cred-box').style.display = 'block';
     return;
@@ -938,86 +938,132 @@ async function doGenerate() {
   }
 
   try {
-    setProgress(5,'Submitting request…',0);
+    setProgress(5, 'Connecting to Hugging Face…', 0);
 
-    // ─── REAL FAL.AI API CALL ──────────────────────────────────
-    // fal.ai supports direct browser calls with CORS
-    // Documentation: https://fal.ai/docs
-    const qualSteps = [20, 40, 60][selQual];
-    const [w,h] = { '16:9':[1280,720], '9:16':[720,1280], '1:1':[768,768], '4:3':[1024,768] }[selAspect];
+    const HF_API = `https://router.huggingface.co/hf-inference/models/${selModel}`;
 
-    const payload = genMode==='t2v' ? {
-      prompt,
-      num_inference_steps: qualSteps,
-      width: w, height: h,
-    } : {
-      image_url: uploadDataUrl,
-      prompt: prompt || 'animate this image smoothly',
-      num_inference_steps: qualSteps,
-    };
+    let videoBlob;
 
-    setProgress(15,'Queuing on fal.ai…',0);
+    if (genMode === 't2v') {
+      // ── TEXT TO VIDEO via HF Inference API ──────────────────
+      setProgress(15, 'Sending prompt to model…', 0);
 
-    // Submit job
-    const submitRes = await fetch(`https://queue.fal.run/${selModel}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${falKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!submitRes.ok) {
-      const err = await submitRes.json().catch(()=>({detail:'Unknown error'}));
-      throw new Error(err.detail || err.error || `HTTP ${submitRes.status} — check your API key`);
-    }
-
-    const { request_id } = await submitRes.json();
-    setProgress(25,'Loading model…',1);
-
-    // Poll for result
-    let videoUrl = null;
-    let attempts = 0;
-    while (!videoUrl && attempts < 120) {
-      await sleep(2500);
-      attempts++;
-
-      const pollRes  = await fetch(`https://queue.fal.run/${selModel}/requests/${request_id}/status`, {
-        headers: { 'Authorization': `Key ${falKey}` }
+      const res = await fetch(HF_API, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${hfKey}`,
+          'Content-Type': 'application/json',
+          'X-Wait-For-Model': 'true',   // wait instead of 503 if model is cold
+        },
+        body: JSON.stringify({
+          inputs: prompt,
+          parameters: {
+            num_inference_steps: [20, 35, 50][selQual],
+            num_frames: 16,
+          }
+        }),
       });
-      const pollData = await pollRes.json();
 
-      if (pollData.status === 'COMPLETED') {
-        setProgress(90,'Finalizing…',3);
-        const resultRes  = await fetch(`https://queue.fal.run/${selModel}/requests/${request_id}`, {
-          headers: { 'Authorization': `Key ${falKey}` }
+      setProgress(40, 'Model loading (first call is slow)…', 1);
+
+      if (res.status === 503) {
+        // Model is loading — HF returns 503 with estimated_time
+        const info = await res.json().catch(()=>({}));
+        const wait = Math.ceil((info.estimated_time || 30));
+        setProgress(25, `Model waking up — waiting ${wait}s…`, 1);
+        await sleep(wait * 1000);
+        // Retry once
+        const retry = await fetch(HF_API, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${hfKey}`,
+            'Content-Type': 'application/json',
+            'X-Wait-For-Model': 'true',
+          },
+          body: JSON.stringify({
+            inputs: prompt,
+            parameters: { num_inference_steps: [20, 35, 50][selQual], num_frames: 16 }
+          }),
         });
-        const resultData = await resultRes.json();
-        // fal.ai returns video under different keys depending on model
-        videoUrl = resultData.video?.url
-          || resultData.video_url
-          || resultData.output?.video?.url
-          || resultData.outputs?.[0]?.video?.url;
-        if (!videoUrl) throw new Error('No video URL in response. Check fal.ai model output format.');
-      } else if (pollData.status === 'FAILED') {
-        throw new Error(pollData.error || 'Generation failed on fal.ai');
+        if (!retry.ok) {
+          const err = await retry.json().catch(()=>({}));
+          throw new Error(err.error || `Error ${retry.status}: ${retry.statusText}. Try again in a minute.`);
+        }
+        setProgress(75, 'Generating video frames…', 2);
+        videoBlob = await retry.blob();
+      } else if (!res.ok) {
+        const err = await res.json().catch(()=>({}));
+        // 401 = bad token, 429 = rate limit
+        if (res.status === 401) throw new Error('Invalid token — go to huggingface.co/settings/tokens and copy a fresh token.');
+        if (res.status === 429) throw new Error('Rate limit hit — wait a few minutes and try again (free tier limit).');
+        throw new Error(err.error || `Error ${res.status}. Check your token and try again.`);
       } else {
-        // Still in queue / processing
-        const pct = Math.min(85, 25 + attempts * 1.5);
-        const msgs = ['Diffusing frames…','Running denoising steps…','Smoothing temporal coherence…'];
-        setProgress(Math.round(pct), msgs[Math.floor(attempts/6)%msgs.length], 2);
+        setProgress(75, 'Generating video frames…', 2);
+        videoBlob = await res.blob();
+      }
+
+    } else {
+      // ── IMAGE TO VIDEO via HF Inference API ──────────────────
+      setProgress(15, 'Preparing image…', 0);
+
+      // Convert base64 data URL to blob
+      const base64 = uploadDataUrl.split(',')[1];
+      const mimeType = uploadDataUrl.split(';')[0].split(':')[1];
+      const imgBytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+      const imgBlob = new Blob([imgBytes], { type: mimeType });
+
+      setProgress(30, 'Sending image to SVD model…', 1);
+
+      const formData = new FormData();
+      formData.append('inputs', imgBlob, 'image.png');
+
+      const res = await fetch(HF_API, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${hfKey}`,
+          'X-Wait-For-Model': 'true',
+        },
+        body: formData,
+      });
+
+      if (res.status === 503) {
+        const info = await res.json().catch(()=>({}));
+        const wait = Math.ceil((info.estimated_time || 40));
+        setProgress(35, `Model waking up — waiting ${wait}s…`, 1);
+        await sleep(wait * 1000);
+        const retry = await fetch(HF_API, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${hfKey}`, 'X-Wait-For-Model': 'true' },
+          body: formData,
+        });
+        if (!retry.ok) {
+          const err = await retry.json().catch(()=>({}));
+          throw new Error(err.error || `Error ${retry.status}. Try again.`);
+        }
+        setProgress(75, 'Animating your image…', 2);
+        videoBlob = await retry.blob();
+      } else if (!res.ok) {
+        const err = await res.json().catch(()=>({}));
+        if (res.status === 401) throw new Error('Invalid token — go to huggingface.co/settings/tokens and copy a fresh token.');
+        if (res.status === 429) throw new Error('Rate limit hit — free tier limit reached. Wait a few minutes.');
+        throw new Error(err.error || `Error ${res.status}. Check your token.`);
+      } else {
+        setProgress(75, 'Animating your image…', 2);
+        videoBlob = await res.blob();
       }
     }
 
-    if (!videoUrl) throw new Error('Timed out after 5 minutes. Try a shorter/simpler generation.');
-
-    setProgress(100,'Done!',4);
+    setProgress(92, 'Encoding video…', 3);
     await sleep(300);
+
+    // HF returns video as binary blob (mp4 or gif)
+    const videoUrl = URL.createObjectURL(videoBlob);
+    setProgress(100, 'Done!', 4);
+    await sleep(200);
     showResult(videoUrl, prompt);
 
   } catch(e) {
-    showErr('Error: ' + e.message);
+    showErr('⚠ ' + e.message);
     // Refund credits on failure
     S.credits += cost;
     saveState(); renderCredits();
